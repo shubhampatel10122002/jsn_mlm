@@ -8,7 +8,7 @@ from sklearn.preprocessing import StandardScaler
 import pandas as pd
 
 # Load your data
-data_path = '/content/drive/MyDrive/JSN_MTR/jsn - smile-surface_tension - Sheet1.csv'
+data_path = '/content/drive/MyDrive/JSN_MLM/jsn - smile-surface_tension - Sheet1.csv'
 df = pd.read_csv(data_path)
 
 # Scale and normalize the target variable
@@ -44,8 +44,8 @@ class SurfaceTensionDataset(Dataset):
             'label': torch.tensor(label, dtype=torch.float)
         }
 
-tokenizer = RobertaTokenizer.from_pretrained('/content/drive/MyDrive/JSN_MTR/')
-model = RobertaForSequenceClassification.from_pretrained('/content/drive/MyDrive/JSN_MTR/', num_labels=1)
+tokenizer = RobertaTokenizer.from_pretrained('/content/drive/MyDrive/JSN_MLM/')
+model = RobertaForSequenceClassification.from_pretrained('/content/drive/MyDrive/JSN_MLM/', num_labels=1)
 
 # Freezing the RoBERTa base weights
 for param in model.roberta.parameters():
