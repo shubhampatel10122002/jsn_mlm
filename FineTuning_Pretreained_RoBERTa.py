@@ -8,7 +8,7 @@ from sklearn.preprocessing import StandardScaler
 import pandas as pd
 
 # Load your data
-data_path = '/content/drive/MyDrive/JSN_MLM/jsn - smile-surface_tension - Sheet1.csv'
+data_path = '/content/drive/MyDrive/JSN_MLM.csv'
 df = pd.read_csv(data_path)
 
 # Scale and normalize the target variable
@@ -60,8 +60,8 @@ val_loader = DataLoader(val_dataset, batch_size=8, shuffle=False)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model.to(device)
 
-epochs = 75
-lr = 4.75e-5
+epochs = 100
+lr = 4.72e-5
 
 optimizer = AdamW(model.parameters(), lr=lr)
 total_steps = len(train_loader) * epochs
@@ -92,9 +92,9 @@ for epoch in range(epochs):
     print(f'Epoch {epoch + 1}/{epochs}, Training Loss: {average_loss}')
 
 # Save the fine-tuned model
-# save_path = '/content/fine_tuned_model/'
-# model.save_pretrained(save_path)
-# tokenizer.save_pretrained(save_path)
+save_path = '/content/fine_tuned_model/'
+model.save_pretrained(save_path)
+tokenizer.save_pretrained(save_path)
 
 import numpy as np
 
