@@ -1,4 +1,3 @@
-
 import torch
 from torch.utils.data import Dataset, DataLoader
 from transformers import RobertaTokenizer, RobertaForSequenceClassification, AdamW, get_linear_schedule_with_warmup
@@ -6,9 +5,13 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 from sklearn.preprocessing import StandardScaler
 import pandas as pd
+import torch.nn as nn
+import os
+from transformers import RobertaConfig
+import numpy as np
 
 # Load your data
-data_path = '/content/drive/MyDrive/JSN_MLM.csv'
+data_path = '/content/drive/MyDrive/JSN_MTR/Harikrishna_uniform.csv'
 df = pd.read_csv(data_path)
 
 # Scale and normalize the target variable
@@ -44,31 +47,58 @@ class SurfaceTensionDataset(Dataset):
             'label': torch.tensor(label, dtype=torch.float)
         }
 
-tokenizer = RobertaTokenizer.from_pretrained('/content/drive/MyDrive/JSN_MLM/')
-model = RobertaForSequenceClassification.from_pretrained('/content/drive/MyDrive/JSN_MLM/', num_labels=1)
+tokenizer = RobertaTokenizer.from_pretrained('/content/drive/MyDrive/JSN_mlm/')
+roberta_model = RobertaForSequenceClassification.from_pretrained('/content/drive/MyDrive/JSN_mlm/', num_labels=1)
 
-# Freezing the RoBERTa base weights
-for param in model.roberta.parameters():
-    param.requires_grad = False
+# Define additional layers
+class CustomSurfaceTensionModel(nn.Module):
+    def __init__(self, roberta_model):
+        super(CustomSurfaceTensionModel, self).__init__()
+        self.roberta = roberta_model.roberta
+        self.classifier = nn.Sequential(
+            nn.Linear(384, 512),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(512, 512),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(512, 512),#
+            nn.ReLU(),#
+            nn.Dropout(0.2),#
+            nn.Linear(512, 1),
+        )
 
+    def forward(self, input_ids, attention_mask):
+        outputs = self.roberta(input_ids=input_ids, attention_mask=attention_mask)
+        pooled_output = outputs.last_hidden_state.mean(dim=1)
+        logits = self.classifier(pooled_output)
+        return logits
+
+model = CustomSurfaceTensionModel(roberta_model)
+
+# Set up data loaders
 train_dataset = SurfaceTensionDataset(train_df, tokenizer)
 val_dataset = SurfaceTensionDataset(val_df, tokenizer)
 
 train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True)
 val_loader = DataLoader(val_dataset, batch_size=8, shuffle=False)
 
+# Set up device
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model.to(device)
 
-epochs = 100
-lr = 4.72e-5
+epoch = 100
 
-optimizer = AdamW(model.parameters(), lr=lr)
-total_steps = len(train_loader) * epochs
+# Set up optimizer and scheduler
+optimizer = AdamW(model.parameters(), lr=4.72e-5)
+total_steps = len(train_loader) * epoch
 scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=0, num_training_steps=total_steps)
 
+# Set up loss function for regression
+criterion = nn.SmoothL1Loss()
+
 # Training loop
-for epoch in range(epochs):
+for epoch in range(epoch):
     model.train()
     total_loss = 0
 
@@ -79,8 +109,8 @@ for epoch in range(epochs):
 
         optimizer.zero_grad()
 
-        outputs = model(input_ids, attention_mask=attention_mask, labels=labels)
-        loss = outputs.loss
+        outputs = model(input_ids, attention_mask=attention_mask)
+        loss = criterion(outputs.flatten(), labels)
         total_loss += loss.item()
 
         loss.backward()
@@ -89,14 +119,10 @@ for epoch in range(epochs):
         scheduler.step()
 
     average_loss = total_loss / len(train_loader)
-    print(f'Epoch {epoch + 1}/{epochs}, Training Loss: {average_loss}')
+    print(f'Epoch {epoch}, Training Loss: {average_loss}')
 
-# Save the fine-tuned model
-save_path = '/content/fine_tuned_model/'
-model.save_pretrained(save_path)
-tokenizer.save_pretrained(save_path)
-
-import numpy as np
+# Save the trained model
+torch.save(model.state_dict(), 'surface_tension_model.pth')
 
 # Validation loop
 model.eval()
@@ -110,7 +136,7 @@ with torch.no_grad():
         labels = batch['label'].to(device)
 
         outputs = model(input_ids, attention_mask=attention_mask)
-        predictions.extend(outputs.logits.flatten().cpu().numpy())
+        predictions.extend(outputs.flatten().cpu().numpy())
         true_labels.extend(labels.cpu().numpy())
 
 # Convert predictions and true_labels to NumPy arrays
@@ -125,18 +151,32 @@ true_labels = scaler.inverse_transform(true_labels.reshape(-1, 1)).flatten()
 mse = mean_squared_error(true_labels, predictions)
 print(f'Mean Squared Error on Validation Set: {mse}')
 
-# Example of making predictions
-smiles_to_predict = "O"
-tokenized_input = tokenizer(smiles_to_predict, return_tensors='pt')
-input_ids = tokenized_input['input_ids'].to(device)
-attention_mask = tokenized_input['attention_mask'].to(device)
+# Load the trained model for prediction
+loaded_model = CustomSurfaceTensionModel(roberta_model)
+loaded_model.load_state_dict(torch.load('surface_tension_model.pth'))
+loaded_model.to(device)
+loaded_model.eval()
 
-model.eval()
+# Tokenize the input SMILES string "CCO"
+input_smiles = "O"
+encoding = tokenizer(
+    input_smiles,
+    truncation=True,
+    padding="max_length",
+    max_length=512,
+    return_tensors='pt'
+)
+
+# Make predictions
 with torch.no_grad():
-    prediction = model(input_ids, attention_mask=attention_mask).logits.item()
+    input_ids = encoding['input_ids'].to(device)
+    attention_mask = encoding['attention_mask'].to(device)
 
-# Inverse transform the predicted label
-# to get back to the original scale
-prediction = scaler.inverse_transform([[prediction]])[0][0]
+    # Model prediction
+    output = loaded_model(input_ids, attention_mask=attention_mask)
+    predicted_value = output.flatten().item()
 
-print(f'Predicted Surface Tension for SMILES "{smiles_to_predict}": {prediction}')
+# Inverse transform the predicted value to get back to the original scale
+predicted_value = scaler.inverse_transform(np.array([[predicted_value]]))[0, 0]
+
+print(f'Predicted Surface Tension for "O": {predicted_value}')
