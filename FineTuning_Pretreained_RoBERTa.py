@@ -10,8 +10,10 @@ import os
 from transformers import RobertaConfig
 import numpy as np
 
-# Load your data
-data_path = '/content/drive/MyDrive/JSN_MTR/Harikrishna_uniform.csv'
+# Loading data
+# data_path = '/content/drive/MyDrive/JSN_MTR/Harikrishna_uniform.csv'
+data_path = '/content/drive/MyDrive/Harikrishna_Data/Harikrishna_March1_data_strict.csv'
+
 df = pd.read_csv(data_path)
 
 # Scale and normalize the target variable
@@ -62,9 +64,9 @@ class CustomSurfaceTensionModel(nn.Module):
             nn.Linear(512, 512),
             nn.ReLU(),
             nn.Dropout(0.2),
-            nn.Linear(512, 512),#
-            nn.ReLU(),#
-            nn.Dropout(0.2),#
+            # nn.Linear(512, 512),#
+            # nn.ReLU(),#
+            # nn.Dropout(0.2),#
             nn.Linear(512, 1),
         )
 
@@ -87,7 +89,7 @@ val_loader = DataLoader(val_dataset, batch_size=8, shuffle=False)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model.to(device)
 
-epoch = 100
+epoch = 150
 
 # Set up optimizer and scheduler
 optimizer = AdamW(model.parameters(), lr=4.72e-5)
@@ -119,10 +121,15 @@ for epoch in range(epoch):
         scheduler.step()
 
     average_loss = total_loss / len(train_loader)
-    print(f'Epoch {epoch}, Training Loss: {average_loss}')
+    print(f'Epoch {epoch + 1}/{epoch}, Training Loss: {average_loss}')
 
 # Save the trained model
-torch.save(model.state_dict(), 'surface_tension_model.pth')
+torch.save(model.state_dict(), 'surface_tension_model_1.pth')
+
+# Save the tokenizer
+tokenizer_save_path = '/content/tokenizer'
+tokenizer.save_pretrained(tokenizer_save_path)
+print(f'Tokenizer saved at: {tokenizer_save_path}')
 
 # Validation loop
 model.eval()
@@ -157,7 +164,7 @@ loaded_model.load_state_dict(torch.load('surface_tension_model.pth'))
 loaded_model.to(device)
 loaded_model.eval()
 
-# Tokenize the input SMILES string "CCO"
+# Tokenize the input SMILES string "O"
 input_smiles = "O"
 encoding = tokenizer(
     input_smiles,
